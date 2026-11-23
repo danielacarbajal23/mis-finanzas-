@@ -114,7 +114,7 @@ ol{margin:0;padding-left:20px;display:flex;flex-direction:column;gap:6px}
 <div id="app"><main id="view"></main><nav id="tabs" aria-label="Secciones"></nav></div>
 <div id="sheet" role="dialog" aria-modal="true"><div id="sheetBody"></div></div>
 <div id="toast" role="status" aria-live="polite"></div>
-<script>var SEED = {"version": 1, "config": {"sueldo": 8985.01, "semanal": 800, "semanasMes": 4, "topeHormiga": 2000, "avisoHormiga": 0.8, "tasaMP": 0.12, "tasaRevolut": 0.15, "registroPagosDesde": "2000-01-01", "inicioHistorial": "2026-08", "ingresoPagaMesSiguiente": true, "ahorroActivo": false, "lastBackup": null}, "tarjetas": [], "categorias": [{"nombre": "Hormiga", "grupo": "Hormiga"}, {"nombre": "Comida fuera", "grupo": "Hormiga"}, {"nombre": "Ropa y personal", "grupo": "Hormiga"}, {"nombre": "Entretenimiento", "grupo": "Hormiga"}, {"nombre": "Antojos", "grupo": "Hormiga"}, {"nombre": "Súper", "grupo": "Variable"}, {"nombre": "Transporte", "grupo": "Variable"}, {"nombre": "Salud", "grupo": "Variable"}, {"nombre": "Casa", "grupo": "Variable"}, {"nombre": "Mascotas", "grupo": "Variable"}, {"nombre": "Escuela", "grupo": "Variable"}, {"nombre": "Variable", "grupo": "Variable"}, {"nombre": "Otros variables", "grupo": "Variable"}, {"nombre": "Prestado Pp", "grupo": "Variable"}], "fijos": [], "movimientos": [], "cajitas": [], "movCajitas": [], "deudas": [], "abonos": [], "pagosTarjeta": [], "programados": []};</script>
+<script>var SEED = {"version": 1, "config": {"sueldo": 0, "semanal": 0, "semanasMes": 4, "topeHormiga": 0, "avisoHormiga": 0.8, "tasaMP": 0.12, "tasaRevolut": 0.15, "registroPagosDesde": "2000-01-01", "inicioHistorial": null, "ingresoPagaMesSiguiente": false, "ahorroActivo": false, "lastBackup": null, "fuentes": ["Sueldo"]}, "tarjetas": [], "categorias": [{"nombre": "Hormiga", "grupo": "Hormiga"}, {"nombre": "Comida fuera", "grupo": "Hormiga"}, {"nombre": "Ropa y personal", "grupo": "Hormiga"}, {"nombre": "Entretenimiento", "grupo": "Hormiga"}, {"nombre": "Antojos", "grupo": "Hormiga"}, {"nombre": "Súper", "grupo": "Variable"}, {"nombre": "Transporte", "grupo": "Variable"}, {"nombre": "Salud", "grupo": "Variable"}, {"nombre": "Casa", "grupo": "Variable"}, {"nombre": "Mascotas", "grupo": "Variable"}, {"nombre": "Escuela", "grupo": "Variable"}, {"nombre": "Variable", "grupo": "Variable"}, {"nombre": "Otros variables", "grupo": "Variable"}, {"nombre": "Prestado Pp", "grupo": "Variable"}], "fijos": [], "movimientos": [], "cajitas": [], "movCajitas": [], "deudas": [], "abonos": [], "pagosTarjeta": [], "programados": []};</script>
 <script>/* ===== Mis Finanzas · lógica (sin interfaz) ===== */
 'use strict';
 var L = (function () {
@@ -176,10 +176,11 @@ var L = (function () {
       if (g.tipo !== 'gasto') return;
       var t = c.tar[g.metodo]; var n = Math.max(1, +g.meses || 1);
       if (t) {
-        var cy = ciclo(t, g.fecha);
+        var cy = ciclo(t, g.fecha), cuota = (n > 1 && +g.cuota > 0) ? +g.cuota : g.monto / n;
         for (var i = 0; i < n; i++) {
           var pago = mk(cy.pago.getFullYear(), cy.pago.getMonth() + i, t.pago);
-          res.push({ tarjeta: t.id, mes: mkey(pago), pago: pago, corte: i === 0 ? cy.corte : null, monto: g.monto / n, concepto: g.concepto, categoria: g.categoria, fecha: g.fecha, i: i + 1, n: n, tipo: 'compra', id: g.id, esFijo: esFijoDup(c, g) });
+          var mm = (n > 1 && +g.cuota > 0 && i === n - 1) ? Math.round((g.monto - cuota * (n - 1)) * 100) / 100 : cuota;
+          res.push({ tarjeta: t.id, mes: mkey(pago), pago: pago, corte: i === 0 ? cy.corte : null, monto: mm, concepto: g.concepto, categoria: g.categoria, fecha: g.fecha, i: i + 1, n: n, tipo: 'compra', id: g.id, esFijo: esFijoDup(c, g) });
         }
       }
     });
@@ -236,7 +237,7 @@ var L = (function () {
   function diasSiComprasHoy(c, tid) { return days(c.today, ciclo(c.tar[tid], c.today).pago); }
 
   // ---------- cajitas ----------
-  function tasa(c, cj) { return cj.tasa != null ? cj.tasa : (cj.donde === 'Revolut' ? c.S.config.tasaRevolut : c.S.config.tasaMP); }
+  function tasa(c, cj) { var k = c.S.config; return cj.tasa != null ? cj.tasa : (cj.donde === 'Revolut' ? k.tasaRevolut : (cj.donde === 'Nu' ? (k.tasaNu != null ? k.tasaNu : 0.13) : k.tasaMP)); }
   function signo(m) { return m.tipo === 'deposito' ? 1 : (m.tipo === 'saldo' ? 0 : -1); }
   function saldo(c, id) {
     var key = 'sal_' + id; if (c.cache[key]) return c.cache[key];
@@ -310,6 +311,10 @@ var L = (function () {
       var n = necesidad(c, cj); return { grupo: 'Pagos que vienen', cajita: cj, nombre: cj.nombre, para: n.para, fecha: n.fecha, dias: n.dias, meta: n.meta, falta: n.falta, saldo: saldo(c, cj.id).saldo, rendHasta: n.rendHasta || 0 };
     }).filter(function (x) { return x.meta > EPS || x.falta > EPS; }).sort(function (a, b) { return (a.fecha ? a.fecha.getTime() : 9e15) - (b.fecha ? b.fecha.getTime() : 9e15); });
     pagos.forEach(take);
+    c.S.cajitas.filter(function (x) { return !x.archivada && x.tipo === 'libre'; }).forEach(function (cj) {
+      var s = saldo(c, cj.id).saldo; var f = Math.max(0, (+cj.meta || 0) - s);
+      if (f > EPS) take({ grupo: 'Guardadito', cajita: cj, nombre: cj.nombre, para: 'Dinero libre para imprevistos · meta ' + money(+cj.meta || 0), falta: f, meta: +cj.meta || 0, saldo: s });
+    });
     c.S.deudas.filter(function (d) { return !d.archivada; }).map(function (d) { var i = infoDeuda(c, d); return { grupo: 'Deudas', deuda: d, cajita: i.cajita, nombre: 'Deuda ' + d.nombre, para: i.cajita ? 'Apartar en ' + i.cajita.nombre : 'Abónale directo', fecha: d.fechaMeta ? parseD(d.fechaMeta) : null, falta: Math.min(i.faltaEsteMes, Math.max(0, i.falta - i.apartado)), meta: i.mensual }; })
       .filter(function (x) { return x.falta > EPS; }).sort(function (a, b) { return (a.fecha ? a.fecha.getTime() : 9e15) - (b.fecha ? b.fecha.getTime() : 9e15); }).forEach(take);
     c.S.cajitas.filter(function (x) { return !x.archivada && x.tipo === 'apartado'; }).sort(function (a, b) { return (a.prioridad || 99) - (b.prioridad || 99); }).map(function (cj) {
@@ -325,6 +330,46 @@ var L = (function () {
 
   // ---------- mes a mes ----------
   function esperado(c) { var k = c.S.config; return +k.sueldo + +k.semanal * +k.semanasMes; }
+  function fuenteFija(c) { var f = c.S.config.fuentes; return f && f.length ? f[0] : 'Sueldo'; }
+  // ---------- débito: dinero suelto ----------
+  function debito(c) {
+    var snap = c.S.config.debito; if (!snap) return null;
+    var d0 = snap.fecha, v = +snap.monto, ent = 0, sal = 0;
+    function idTs(id) { var t = parseInt(String(id).slice(0, 8), 36); return isNaN(t) ? 0 : t; }
+    function afterM(m) { return m.fecha <= c.hoy && (m.fecha > d0 || (m.fecha === d0 && snap.ts && idTs(m.id) > snap.ts)); }
+    c.S.movimientos.forEach(function (m) {
+      if (!afterM(m)) return;
+      if (m.tipo === 'ingreso') ent += +m.monto;
+      else if (!c.tar[m.metodo] && !m.cajita) sal += +m.monto;
+    });
+    c.S.pagosTarjeta.forEach(function (p) { if (afterM(p) && !p.cajita) sal += +p.monto; });
+    c.S.movCajitas.forEach(function (m) { if (!afterM(m)) return; if (m.tipo === 'deposito') sal += +m.monto; else if (m.tipo === 'retiro') ent += +m.monto; });
+    c.S.abonos.forEach(function (a) { if (afterM(a) && a.origen === 'mio') sal += +a.monto; });
+    return { saldo: v + ent - sal, entro: ent, salio: sal, desde: d0, inicial: v };
+  }
+  // ingresos reales registrados en un mes calendario
+  function ingresosMes(c, key) { return c.S.movimientos.filter(function (m) { return m.tipo === 'ingreso' && m.fecha.slice(0, 7) === key; }); }
+  // ---------- me deben ----------
+  function infoPorCobrar(c, p) {
+    var cob = c.S.movimientos.filter(function (m) { return m.tipo === 'ingreso' && m.porCobrar === p.id; });
+    var cobrado = cob.reduce(function (a, m) { return a + +m.monto; }, 0);
+    var esteMes = cob.filter(function (m) { return !m.extra && (m.mesPlan || m.fecha.slice(0, 7)) === c.cur; }).reduce(function (a, m) { return a + +m.monto; }, 0);
+    var falta = Math.max(0, p.total - cobrado);
+    var esperaEsteMes = Math.max(0, Math.min(+p.mensual || 0, falta + esteMes) - esteMes);
+    var meses = p.mensual ? Math.ceil((falta - esperaEsteMes) / p.mensual - 1e-9) + (esperaEsteMes > EPS ? 1 : 0) : 0;
+    return { cobrado: cobrado, falta: falta, esteMes: esteMes, esperaEsteMes: esperaEsteMes, cobros: cob, pct: p.total ? cobrado / p.total : 0, termina: meses ? addM(c.cur, Math.max(0, meses - 1)) : null };
+  }
+  // lo que esperas cobrar en el mes `im` (solo mes actual y futuros)
+  function porCobrarMes(c, im) {
+    var d = mdiff(c.cur, im); if (d < 0) return 0; var tot = 0;
+    (c.S.porCobrar || []).forEach(function (p) {
+      if (p.archivada || !p.mensual) return; var i = infoPorCobrar(c, p);
+      if (d === 0) { tot += i.esperaEsteMes; return; }
+      var rem = i.falta - i.esperaEsteMes;
+      for (var k = 1; k <= d && rem > EPS; k++) { var a = Math.min(+p.mensual, rem); rem -= a; if (k === d) tot += a; }
+    });
+    return tot;
+  }
   function planDeudaMes(c, key) {
     // plan: cada deuda junta lo mismo cada mes hasta su fecha meta
     var tot = 0, items = [];
@@ -346,10 +391,13 @@ var L = (function () {
     var k = c.S.config, im = k.ingresoPagaMesSiguiente ? addM(key, -1) : key;
     var reg = c.S.movimientos.filter(function (m) { return m.tipo === 'ingreso' && m.fecha.slice(0, 7) === im; });
     var regTot = reg.reduce(function (a, m) { return a + +m.monto; }, 0);
-    var esp = esperado(c);
+    var esp = esperado(c), soloReal = k.variableSoloReal !== false, fija = fuenteFija(c);
     var pasado = mdiff(c.cur, key) < 0; // mes de pago ya pasó
-    var ingreso = mdiff(c.cur, im) < 0 ? (regTot > 0 ? regTot : esp) : Math.max(esp, regTot);
-    var r = { key: key, ingreso: ingreso, ingresoReg: regTot, esperado: esp, pasado: pasado, actual: key === c.cur, fijos: [], tarjetas: {}, hormiga: 0, variable: 0, msi: [], debito: [], deudas: [], apartados: [], programados: [] };
+    var regPC = reg.filter(function (m) { return m.porCobrar; }).reduce(function (a, m) { return a + +m.monto; }, 0);
+    var regFijo = reg.filter(function (m) { return !m.porCobrar && m.categoria === fija; }).reduce(function (a, m) { return a + +m.monto; }, 0);
+    var regVar = regTot - regPC - regFijo, espVar = +k.semanal * +k.semanasMes, pcPend = porCobrarMes(c, im);
+    var ingreso = mdiff(c.cur, im) < 0 ? (regTot > 0 ? regTot : (soloReal ? +k.sueldo : esp)) : Math.max(+k.sueldo, regFijo) + (soloReal ? regVar : Math.max(espVar, regVar)) + regPC + pcPend;
+    var r = { key: key, ingreso: ingreso, ingresoReg: regTot, esperado: esp + pcPend + regPC, pasado: pasado, imes: im, regVar: regVar, espVar: espVar, soloReal: soloReal, noContado: soloReal && mdiff(c.cur, im) >= 0 ? Math.max(0, espVar - regVar) : 0, actual: key === c.cur, fijos: [], tarjetas: {}, hormiga: 0, variable: 0, msi: [], debito: [], deudas: [], apartados: [], programados: [] };
     // fijos (todos, por el mes en que sale el dinero)
     c.S.fijos.forEach(function (f) { ocurrencias(c, f, addM(c.cur, 24)).forEach(function (o) { if (o.mes === key) r.fijos.push([f.nombre, o.monto, c.tar[f.metodo] ? c.tar[f.metodo].nombre : 'Débito']); }); });
     // compras con tarjeta
@@ -419,7 +467,7 @@ var L = (function () {
   return { EPS: EPS, pad: pad, mk: mk, parseD: parseD, ymd: ymd, mkey: mkey, addM: addM, mdiff: mdiff, days: days, fcorta: fcorta, flarga: flarga, mesNombre: mesNombre, money: money, MES: MES, MESL: MESL,
     ctx: ctx, metodoNombre: metodoNombre, cajita: cajita, grupoDe: grupoDe, ciclo: ciclo, ocurrencias: ocurrencias, cargos: cargos, estados: estados, proximoEstado: proximoEstado, usado: usado, diasSiComprasHoy: diasSiComprasHoy, aplicaMes: aplicaMes,
     saldo: saldo, tasa: tasa, depositadoMes: depositadoMes, deuda: deuda, infoDeuda: infoDeuda, cajitaDeDeuda: cajitaDeDeuda, infoApartado: infoApartado, necesidad: necesidad, repartir: repartir,
-    esperado: esperado, mes: mes, meses: meses, promedioDiaADia: promedioDiaADia, simularDeuda: simularDeuda, planDeudaMes: planDeudaMes, esFijoDup: esFijoDup };
+    esperado: esperado, debito: debito, ingresosMes: ingresosMes, fuenteFija: fuenteFija, infoPorCobrar: infoPorCobrar, porCobrarMes: porCobrarMes, mes: mes, meses: meses, promedioDiaADia: promedioDiaADia, simularDeuda: simularDeuda, planDeudaMes: planDeudaMes, esFijoDup: esFijoDup };
 })();
 if (typeof module !== 'undefined') module.exports = L;
 </script>
@@ -475,11 +523,29 @@ function vInicio() {
   var html = '<div class="scroll"><div class="hello"><span class="muted">' + esc(cap(L.flarga(C.today))) + '</span><h1 class="big">Mis finanzas</h1></div>';
   var lb = k.lastBackup ? L.days(L.parseD(k.lastBackup), C.today) : 999;
   if (lb > 7) html += '<a class="note warn" href="#respaldo">' + icon('save') + '<span>' + (k.lastBackup ? 'Tu último respaldo fue hace ' + lb + ' días.' : 'Aún no guardas un respaldo.') + ' <b>Guárdalo ahora</b></span></a>';
-  html += '<a class="hero" href="#meses"><span class="lbl">' + cap(L.mesNombre(C.cur, true)) + ' · ' + (m.sobra >= 0 ? 'te queda' : 'te falta') + '</span><span class="amt">' + M(Math.abs(m.sobra)) + '</span>' +
-    '<div class="grid2"><div><span class="lbl">Entra</span><b>' + M(m.ingreso) + '</b></div><div><span class="lbl">Fijos</span><b>−' + M(m.tFijos) + '</b></div>' +
-    '<div><span class="lbl">Gastos y MSI</span><b>−' + M(m.tGastos + m.tProg) + '</b></div><div><span class="lbl">Deudas y apartados</span><b>−' + M(m.tDeudas + m.tApartados) + '</b></div></div></a>';
+  // HOY (real)
+  var db = L.debito(C), gs = S.cajitas.filter(function (x) { return !x.archivada && x.tipo === 'libre'; });
+  var gsal = gs.reduce(function (a, x) { return a + L.saldo(C, x.id).saldo; }, 0);
+  html += '<section class="hero"><span class="lbl">Hoy · dinero suelto en tu débito</span>';
+  if (db) html += '<span class="amt">' + M(db.saldo) + '</span><span class="lbl">' + (Math.abs(db.saldo) < 1 ? 'Todo está repartido.' : (db.saldo > 0 ? 'Aún no lo asignas a ninguna cajita.' : 'Registraste más salidas que dinero: revisa o actualiza tu saldo.')) + '</span>';
+  else html += '<span class="lbl">Dime cuánto tienes hoy en tu débito (lo que no está en cajitas) para llevarlo al día.</span>';
+  html += '<div class="grid2">' + (gs.length ? '<div><span class="lbl">Guardadito</span><b>' + M(gsal) + '</b></div>' : '') + '<div><button type="button" class="link" style="color:#fff;text-align:left" data-act="setDebito">' + (db ? 'Actualizar saldo de débito' : 'Poner saldo de débito') + '</button></div></div>';
+  if (db && db.saldo > 1) html += '<a class="secondary" style="background:#fff" href="#repartir" data-act="repartirSuelto" data-v="' + db.saldo.toFixed(2) + '">Repartir ' + M(db.saldo) + '</a>';
+  html += '</section>';
+  // fin de mes: guardadito sin usar
+  if (gs.length && gsal > 1 && (C.today.getDate() >= 25 || C.today.getDate() <= 3)) html += '<div class="note ok"><span>Te quedan <b>' + M(gsal) + '</b> en tu guardadito. Si no los vas a usar, mándalos a una cajita que lo necesite. <button type="button" class="link" data-act="cerrarGuardadito">Mover ahora</button></span></div>';
+  // PLAN DEL MES
+  var cobrado = L.ingresosMes(C, m.imes).reduce(function (a, x) { return a + +x.monto; }, 0);
+  html += '<a class="card" href="#meses"><div class="row"><b>Plan de ' + L.mesNombre(C.cur, true) + '</b><span class="small muted">Ver mes a mes</span></div>' +
+    '<div class="grid2 gap"><div class="mini"><span class="small muted">' + (S.config.ingresoPagaMesSiguiente ? 'Te entró en ' + L.mesNombre(m.imes, true) : 'Te ha entrado') + '</span><b>' + M(cobrado) + '</b></div>' +
+    '<div class="mini"><span class="small muted">Cuento para el plan</span><b>' + M(m.ingreso) + '</b></div></div>' +
+    (m.noContado > L.EPS ? '<span class="small muted">No cuento ' + M(m.noContado) + ' de lo variable hasta que te lo paguen.</span>' : '') +
+    '<div class="ln"><span>Fijos</span><span>−' + M(m.tFijos) + '</span></div><div class="ln"><span>Gastos y MSI</span><span>−' + M(m.tGastos + m.tProg) + '</span></div><div class="ln"><span>Deudas y apartados</span><span>−' + M(m.tDeudas + m.tApartados) + '</span></div>' +
+    '<div class="total"><span>' + (m.sobra >= 0 ? 'Según el plan te quedarían' : 'Según el plan te faltarían') + '</span><b class="' + (m.sobra >= 0 ? 'ok-t' : 'red-t') + '">' + M(Math.abs(m.sobra)) + '</b></div>' +
+    '<span class="small muted">Esto es una proyección del mes, no dinero suelto. Lo real es el saldo de arriba.</span></a>';
   var tope = +k.topeHormiga, pctH = tope ? m.hormiga / tope : 0;
-  html += '<section class="card"><div class="row"><b>Hormiga del mes</b><span>' + M(m.hormiga) + ' de ' + M(tope) + '</span></div>' + bar(pctH, pctH > 1 ? 'red' : (pctH >= k.avisoHormiga ? 'orange' : 'navy')) +
+  if (!tope) html += '<section class="card"><div class="row"><b>Hormiga del mes</b><span>' + M(m.hormiga) + '</span></div><span class="small muted">Sin tope. Puedes poner uno en Ajustes.</span></section>';
+  else html += '<section class="card"><div class="row"><b>Hormiga del mes</b><span>' + M(m.hormiga) + ' de ' + M(tope) + '</span></div>' + bar(pctH, pctH > 1 ? 'red' : (pctH >= k.avisoHormiga ? 'orange' : 'navy')) +
     '<span class="small ' + (pctH > 1 ? 'red-t' : 'muted') + '">' + (pctH > 1 ? 'Te pasaste por ' + M(m.hormiga - tope) : 'Te quedan ' + M(tope - m.hormiga)) + '</span></section>';
   html += '<div class="grid2 gap"><a class="tile" href="#registrar">' + icon('plus') + '<b>Registrar</b></a><a class="tile" href="#repartir">' + icon('up') + '<b>Me entró dinero</b></a></div>';
   var pagos = S.cajitas.filter(function (x) { return !x.archivada && (x.tipo === 'tarjeta' || x.tipo === 'fijo'); }).map(function (cj) { var n = L.necesidad(C, cj); n.cj = cj; return n; })
@@ -498,10 +564,13 @@ function vInicio() {
     deus.forEach(function (d) { var i = L.infoDeuda(C, d); html += '<a class="li col" href="#deuda/' + d.id + '"><div class="row"><b>' + esc(d.nombre) + '</b><span>Debes ' + M(i.falta) + '</span></div>' + bar(i.pct, 'navy') + '<span class="small muted">' + (i.faltaEsteMes > L.EPS ? 'Este mes junta ' + M(i.faltaEsteMes) : 'Este mes ya cumpliste') + (i.apartado > L.EPS ? ' · apartado ' + M(i.apartado) : '') + '</span></a>'; });
     html += '</section>';
   }
+  var pcs = (S.porCobrar || []).filter(function (p) { return !p.archivada; });
+  if (pcs.length) { html += '<div class="sechead"><h2>Te deben</h2><a href="#medeben">Ver</a></div><section class="card list">'; pcs.forEach(function (p) { var i = L.infoPorCobrar(C, p); html += '<a class="li col" href="#medeben"><div class="row"><b>' + esc(p.nombre) + '</b><span>Te debe ' + M(i.falta) + '</span></div>' + bar(i.pct, 'green') + '<span class="small muted">' + (i.esperaEsteMes > L.EPS ? 'Este mes esperas ' + M(i.esperaEsteMes) : 'Este mes ya te pagó') + '</span></a>'; }); html += '</section>'; }
   var best = null; S.tarjetas.forEach(function (t) { var d = L.diasSiComprasHoy(C, t.id); if (!best || d > best.d) best = { t: t, d: d }; });
   if (best) html += '<div class="note ok">' + icon('card') + '<span>Si compras hoy, usa <b>' + esc(best.t.nombre) + '</b>: lo pagas hasta el ' + L.flarga(L.ciclo(best.t, C.today).pago) + ' (' + best.d + ' días).</span></div>';
   return html + '</div>';
 }
+function fuentes() { var f = S.config.fuentes && S.config.fuentes.length ? S.config.fuentes : ['Sueldo', 'Doctora']; return f.concat(['Otro ingreso']); }
 function cap(s) { return s.charAt(0).toUpperCase() + s.slice(1); }
 
 // ================= REGISTRAR =================
@@ -519,11 +588,13 @@ function vRegistrar() {
     if (r.metodo === 'cajita') html += field('¿De qué cajita salió?', cajitaSelect('cajita', r.cajita));
     if (C.tar[r.metodo]) {
       html += '<div class="lbl2">Forma de pago</div><div class="chips">' + [1, 3, 6, 9, 12, 18, 24].map(function (n) { return chip('regMeses', n, n === 1 ? 'Contado' : n, r.meses === n); }).join('') + '</div>' +
-        '<div class="stepper"><span>Otro plazo</span><div><button type="button" data-act="regMas" data-v="-1" aria-label="Un mes menos">−</button><b>' + (r.meses === 1 ? 'Contado' : r.meses + ' meses') + '</b><button type="button" data-act="regMas" data-v="1" aria-label="Un mes más">+</button></div></div>';
+        '<div class="stepper"><span>Otro plazo</span><div><button type="button" data-act="regMas" data-v="-1" aria-label="Un mes menos">−</button><b>' + (r.meses === 1 ? 'Contado' : r.meses + ' meses') + '</b><button type="button" data-act="regMas" data-v="1" aria-label="Un mes más">+</button></div></div>' +
+        (r.meses > 1 ? field('Mensualidad que cobra el banco (opcional, para que cuadre al centavo)', '<input name="cuota" inputmode="decimal" value="' + esc(r.cuota || '') + '" placeholder="' + (num(r.monto) ? (num(r.monto) / r.meses).toFixed(2) : '') + '">') : '');
     }
     html += field('Fecha', '<input type="date" name="fecha" value="' + (r.fecha || hoy) + '">') + '<div class="explain" id="regExplain">' + esc(explicaGasto()) + '</div>';
   } else if (r.tipo === 'ingreso') {
-    html += amountField(r.monto) + field('De dónde', '<select name="categoria">' + ['Sueldo', 'Doctora', 'Otro ingreso'].map(function (x) { return opt(x, x, r.categoria === x); }).join('') + '</select>') +
+    var pcs = (S.porCobrar || []).filter(function (p) { return !p.archivada; });
+    html += amountField(r.monto) + field('De dónde', '<select name="categoria">' + fuentes().map(function (x) { return opt(x, x, r.categoria === x); }).join('') + pcs.map(function (p) { return opt('pc:' + p.id, 'Me pagó ' + p.nombre + ' (me debe)', r.categoria === 'pc:' + p.id); }).join('') + '</select>') +
       field('Nota (opcional)', '<input name="concepto" value="' + esc(r.concepto || '') + '">') + field('Fecha', '<input type="date" name="fecha" value="' + (r.fecha || hoy) + '">') +
       '<div class="explain">' + (S.config.ingresoPagaMesSiguiente ? 'Lo que te entra este mes cuenta para los pagos del mes que sigue.' : 'Cuenta para los pagos de este mes.') + ' Después de guardarlo te llevo a Repartir.</div>';
   } else if (r.tipo === 'pago') {
@@ -556,7 +627,7 @@ function explicaGasto() {
   if (r.metodo === 'cajita') { var cj = L.cajita(C, r.cajita); return 'Sale de ' + (cj ? cj.nombre : 'la cajita') + ' hoy y se resta de su saldo.'; }
   if (!t) return 'Sale de tu débito el ' + L.fcorta(f) + ' y se resta de lo que te queda este mes.';
   var cy = L.ciclo(t, f), s = 'Entra al corte del ' + L.fcorta(cy.corte) + ' de ' + t.nombre + ' y se paga el ' + L.fcorta(cy.pago) + '.';
-  if (n > 1) { var ult = L.mk(cy.pago.getFullYear(), cy.pago.getMonth() + n - 1, t.pago); s += ' Son ' + n + ' pagos de ' + M(monto / n) + ', hasta el ' + L.fcorta(ult) + ' ' + ult.getFullYear() + '.'; }
+  if (n > 1) { var ult = L.mk(cy.pago.getFullYear(), cy.pago.getMonth() + n - 1, t.pago), cu = num(r.cuota) > 0 ? num(r.cuota) : monto / n; s += ' Son ' + n + ' pagos de ' + M(cu) + (num(r.cuota) > 0 ? ' (el último de ' + M(monto - cu * (n - 1)) + ')' : '') + ', hasta el ' + L.fcorta(ult) + ' ' + ult.getFullYear() + '.'; }
   if (r.categoria === 'Fijo') s += ' Si es un fijo que ya tienes, no se cuenta doble.';
   return s;
 }
@@ -568,10 +639,12 @@ function guardarRegistro() {
       if (!r.cajita) { toast('Elige la cajita'); return; }
       S.movimientos.push({ id: uid(), fecha: f, tipo: 'gasto', concepto: r.concepto || r.categoria, categoria: r.categoria, metodo: 'debito', meses: 1, monto: monto, cajita: r.cajita });
       S.movCajitas.push({ id: uid(), fecha: f, cajita: r.cajita, tipo: 'retiro', monto: monto, nota: 'Gasto: ' + (r.concepto || r.categoria) });
-    } else S.movimientos.push({ id: uid(), fecha: f, tipo: 'gasto', concepto: r.concepto || r.categoria, categoria: r.categoria, metodo: r.metodo, meses: C.tar[r.metodo] ? (r.meses || 1) : 1, monto: monto });
+    } else { var g = { id: uid(), fecha: f, tipo: 'gasto', concepto: r.concepto || r.categoria, categoria: r.categoria, metodo: r.metodo, meses: C.tar[r.metodo] ? (r.meses || 1) : 1, monto: monto }; if (g.meses > 1 && num(r.cuota) > 0) g.cuota = num(r.cuota); S.movimientos.push(g); }
     toast('Gasto guardado'); ui.reg = { tipo: 'gasto', metodo: r.metodo };
   } else if (r.tipo === 'ingreso') {
-    S.movimientos.push({ id: uid(), fecha: f, tipo: 'ingreso', concepto: r.concepto || r.categoria, categoria: r.categoria, metodo: 'debito', meses: 1, monto: monto });
+    var ing = { id: uid(), fecha: f, tipo: 'ingreso', concepto: r.concepto || r.categoria, categoria: r.categoria, metodo: 'debito', meses: 1, monto: monto };
+    if (String(r.categoria).indexOf('pc:') === 0) { var pc = (S.porCobrar || []).filter(function (p) { return 'pc:' + p.id === r.categoria; })[0]; ing.porCobrar = pc.id; ing.categoria = 'Me pagó ' + pc.nombre; ing.concepto = r.concepto || ing.categoria; }
+    S.movimientos.push(ing);
     ui.repMonto = monto.toFixed(2); ui.reg = { tipo: 'ingreso' }; save(); toast('Ingreso guardado'); go('repartir'); return;
   } else if (r.tipo === 'pago') {
     S.pagosTarjeta.push({ id: uid(), fecha: f, tarjeta: r.tarjeta, monto: monto, cajita: r.cajita || null });
@@ -624,7 +697,7 @@ function guardarReparto() {
 // ================= MES A MES =================
 var COL = { fijos: '#1F3864', gastos: '#9AA3B0', deudas: '#B45309', apartados: '#2F7D9A', prog: '#7A5AA6', sobra: '#BFE0CB' };
 function vMeses() {
-  var desde = S.config.inicioHistorial, n = L.mdiff(desde, C.cur) + 13, ms = L.meses(C, desde, n);
+  var desde = S.config.inicioHistorial || C.cur, n = L.mdiff(desde, C.cur) + 13, ms = L.meses(C, desde, n);
   if (ui.mesSel == null) ui.mesSel = C.cur;
   var max = 1; ms.forEach(function (m) { max = Math.max(max, m.ingreso, m.sale); });
   var fut = ms.filter(function (m) { return L.mdiff(C.cur, m.key) >= 0 && L.mdiff(C.cur, m.key) < 7; });
@@ -645,7 +718,7 @@ function vMeses() {
   html += '</div><div class="legend">' + [['Fijos', 'fijos'], ['Gastos y MSI', 'gastos'], ['Deudas', 'deudas'], ['Apartados', 'apartados'], ['Programados', 'prog'], ['Te sobra', 'sobra']].map(function (x) { return '<span><i style="background:' + COL[x[1]] + '"></i>' + x[0] + '</span>'; }).join('') + '</div></section>';
   var m = L.mes(C, ui.mesSel);
   html += '<section class="card detail"><div class="row"><h2>' + cap(L.mesNombre(m.key, true)) + '</h2><span class="small muted">' + (m.pasado ? 'Lo que pasó' : (m.actual ? 'Mes actual' : 'Lo que viene')) + '</span></div>';
-  html += line(m.pasado ? 'Te entró' : 'Te entra', m.ingreso, 'big ok-t') + (m.ingresoReg && m.ingresoReg !== m.ingreso ? '<div class="sub small muted">Registrado: ' + M(m.ingresoReg) + '</div>' : '');
+  html += line(m.pasado ? 'Te entró' : 'Cuento para el plan', m.ingreso, 'big ok-t') + '<div class="sub small muted">' + (S.config.ingresoPagaMesSiguiente ? 'Ingresos de ' + L.mesNombre(m.imes, true) + '. ' : '') + 'Registrado: ' + M(m.ingresoReg) + (m.noContado > L.EPS ? ' · sin contar ' + M(m.noContado) + ' de lo variable hasta que te paguen' : '') + '</div>';
   html += grp('Fijos', m.tFijos, m.fijos.map(function (x) { return [x[0] + ' · ' + x[2], x[1]]; }));
   var gi = [['Hormiga', m.hormiga], ['Variables', m.variable]].filter(function (x) { return x[1] > L.EPS; });
   if (m.estimado) gi.push(['Estimado del día a día (tu promedio)', m.estimadoExtra]);
@@ -664,7 +737,7 @@ function grp(t, tot, items) { return '<div class="grp2"><div class="ln hd"><span
 
 // ================= MÁS =================
 function vMas() {
-  var items = [['tarjetas', 'card', 'Tarjetas', 'Cortes, pagos y estado de cuenta'], ['deudas', 'debt', 'Deudas', 'Cuánto debes y cuánto juntar al mes'], ['apartados', 'box', 'Apartados y cajitas', 'UIC, diplomado, título, ahorro'],
+  var items = [['tarjetas', 'card', 'Tarjetas', 'Cortes, pagos y estado de cuenta'], ['deudas', 'debt', 'Deudas', 'Cuánto debes y cuánto juntar al mes'], ['medeben', 'up', 'Me deben', 'Lo que te deben y cuánto te han pagado'], ['apartados', 'box', 'Apartados y cajitas', 'UIC, diplomado, título, ahorro'],
     ['historial', 'list', 'Historial', 'Todo lo que has registrado'], ['programados', 'cal', 'Gastos programados', 'Pagos futuros que ya conoces'], ['ajustes', 'gear', 'Ajustes', 'Sueldo, tarjetas, fijos, categorías'], ['respaldo', 'save', 'Respaldo', 'Guarda o abre tu archivo de respaldo']];
   return head('Más') + '<div class="scroll"><section class="card list">' + items.map(function (x) { return '<a class="li" href="#' + x[0] + '"><div class="row2">' + icon(x[1]) + '<div><b>' + x[2] + '</b><span class="small muted">' + x[3] + '</span></div></div>' + icon('chev') + '</a>'; }).join('') + '</section></div>';
 }
@@ -750,13 +823,13 @@ function formDeuda(id) {
 // ================= APARTADOS =================
 function vApartados() {
   var html = head('Apartados y cajitas', 'mas') + '<div class="scroll">';
-  var grupos = [['apartado', 'Para pagos que vienen'], ['deuda', 'Apartado para deudas'], ['tarjeta', 'Cajitas de tarjetas'], ['fijo', 'Cajitas de fijos'], ['ahorro', 'Ahorro personal']];
+  var grupos = [['libre', 'Guardadito (dinero libre)'], ['apartado', 'Para pagos que vienen'], ['deuda', 'Apartado para deudas'], ['tarjeta', 'Cajitas de tarjetas'], ['fijo', 'Cajitas de fijos'], ['ahorro', 'Ahorro personal']];
   var totMP = 0, totRev = 0, rend = 0;
   S.cajitas.filter(function (x) { return !x.archivada; }).forEach(function (x) { var s = L.saldo(C, x.id); if (x.donde === 'Revolut') totRev += s.saldo; else totMP += s.saldo; rend += s.rendimiento; });
   html += '<div class="grid2 gap"><div class="mini"><span class="small muted">En Mercado Pago (' + (S.config.tasaMP * 100).toFixed(0) + '%)</span><b>' + M(totMP) + '</b></div><div class="mini"><span class="small muted">En Revolut (' + (S.config.tasaRevolut * 100).toFixed(0) + '%)</span><b>' + M(totRev) + '</b></div></div>';
   grupos.forEach(function (g) {
     var xs = S.cajitas.filter(function (x) { return !x.archivada && x.tipo === g[0]; }).sort(function (a, b) { return (a.prioridad || 99) - (b.prioridad || 99); });
-    if (!xs.length && g[0] !== 'apartado') return;
+    if (!xs.length && g[0] !== 'apartado') { if (g[0] === 'libre') html += '<div class="sechead"><h2>Guardadito (dinero libre)</h2><button type="button" class="link" data-act="nuevoGuardadito">Crear</button></div><p class="small muted">Un dinero libre cada mes para imprevistos, sin tocar tus cajitas. Lo que no uses lo mandas a otra cajita a fin de mes.</p>'; return; }
     html += '<div class="sechead"><h2>' + g[1] + '</h2>' + (g[0] === 'ahorro' ? '<button type="button" class="link" data-act="toggleAhorro">' + (S.config.ahorroActivo ? 'Pausar' : 'Activar') + '</button>' : '') + '</div>';
     if (g[0] === 'ahorro' && !S.config.ahorroActivo) html += '<p class="small muted">En pausa: lo que sobre al repartir no se manda aquí hasta que lo actives.</p>';
     xs.forEach(function (x) {
@@ -765,6 +838,7 @@ function vApartados() {
       else if (x.tipo === 'deuda') { var dd = L.deuda(C, x.ref); sub = dd ? 'Para Deuda ' + dd.nombre : ''; }
       else if (x.tipo === 'tarjeta' || x.tipo === 'fijo') { var n = L.necesidad(C, x); sub = n.fecha ? n.para + ' · ' + L.fcorta(n.fecha) + ' · ' + (n.falta > L.EPS ? 'falta ' + M(n.falta) : 'cubierto') : n.para; }
       else if (x.tipo === 'ahorro') sub = Math.round((+x.pct || 0) * 100) + '% de lo que sobra';
+      else if (x.tipo === 'libre') { meta = +x.meta || 0; pct = meta ? Math.min(1, s.saldo / meta) : null; sub = 'Meta del mes ' + M(meta) + ' · en ' + x.donde; }
       html += '<button type="button" class="card col tap" data-act="verCajita" data-v="' + x.id + '"><div class="row"><div><b>' + esc(x.nombre) + '</b><span class="small muted">' + esc(sub) + '</span></div><div class="r"><b>' + M(s.saldo) + '</b><span class="small ok-t">+' + M(s.rendimiento) + '</span></div></div>' + (pct != null ? bar(pct, 'green') : '') + '</button>';
     });
   });
@@ -783,11 +857,11 @@ function verCajita(id) {
 }
 function formCajita(id) {
   var x = id ? L.cajita(C, id) : { nombre: '', donde: 'Revolut', tipo: 'apartado', meta: '', fecha: '', prioridad: '' };
-  var tipos = [['apartado', 'Apartado para un pago (meta)'], ['ahorro', 'Ahorro personal (%)'], ['tarjeta', 'Para pagar una tarjeta'], ['fijo', 'Para pagar un fijo'], ['deuda', 'Para una deuda']];
+  var tipos = [['libre', 'Guardadito (dinero libre del mes)'], ['apartado', 'Apartado para un pago (meta)'], ['ahorro', 'Ahorro personal (%)'], ['tarjeta', 'Para pagar una tarjeta'], ['fijo', 'Para pagar un fijo'], ['deuda', 'Para una deuda']];
   sheet('<h2>' + (id ? 'Editar' : 'Nuevo apartado') + '</h2><form id="sf">' + field('Nombre', '<input name="nombre" value="' + esc(x.nombre) + '" required>') +
     field('Para qué es', '<select name="tipo">' + tipos.map(function (t) { return opt(t[0], t[1], x.tipo === t[0]); }).join('') + '</select>') +
-    field('Dónde está', '<select name="donde">' + opt('Mercado Pago', 'Mercado Pago', x.donde === 'Mercado Pago') + opt('Revolut', 'Revolut', x.donde === 'Revolut') + '</select>') +
-    field('Meta (para apartados)', '<input name="meta" inputmode="decimal" value="' + esc(x.meta || '') + '" placeholder="Ej. 20000">') + field('Para cuándo (opcional; si no sabes, déjalo vacío)', '<input type="date" name="fecha" value="' + esc(x.fecha || '') + '">') +
+    field('Dónde está', '<select name="donde">' + opt('Mercado Pago', 'Mercado Pago', x.donde === 'Mercado Pago') + opt('Revolut', 'Revolut', x.donde === 'Revolut') + opt('Nu', 'Nu', x.donde === 'Nu') + '</select>') +
+    field('Meta (apartados) o cuánto dejar cada mes (guardadito)', '<input name="meta" inputmode="decimal" value="' + esc(x.meta || '') + '" placeholder="Ej. 20000">') + field('Para cuándo (opcional; si no sabes, déjalo vacío)', '<input type="date" name="fecha" value="' + esc(x.fecha || '') + '">') +
     field('Prioridad (1 = primero)', '<input name="prioridad" inputmode="numeric" value="' + esc(x.prioridad || '') + '">') + field('% de lo que sobra (ahorro personal)', '<input name="pct" inputmode="decimal" value="' + esc(x.pct ? Math.round(x.pct * 100) : '') + '" placeholder="Ej. 20">') +
     field('Vinculada a (tarjeta, fijo o deuda)', '<select name="ref">' + opt('', '—', !x.ref) + S.tarjetas.map(function (t) { return opt(t.id, 'Tarjeta ' + t.nombre, x.ref === t.id); }).join('') + S.fijos.map(function (f) { return opt(f.id, 'Fijo ' + f.nombre, x.ref === f.id); }).join('') + S.deudas.map(function (d) { return opt(d.id, 'Deuda ' + d.nombre, x.ref === d.id); }).join('') + '</select>') +
     field('Tasa anual propia (opcional, %)', '<input name="tasa" inputmode="decimal" value="' + esc(x.tasa != null ? x.tasa * 100 : '') + '">') +
@@ -851,11 +925,13 @@ function vProgramados() {
 function vAjustes() {
   var k = S.config;
   var html = head('Ajustes', 'mas') + '<div class="scroll"><form id="cfg" class="card">' + '<h2>Ingresos</h2>' +
-    field('Sueldo mensual', '<input name="sueldo" inputmode="decimal" value="' + k.sueldo + '">') + field('Ingreso de la doctora por semana (aprox.)', '<input name="semanal" inputmode="decimal" value="' + k.semanal + '">') +
+    field('Ingreso fijo al mes (sueldo)', '<input name="sueldo" inputmode="decimal" value="' + k.sueldo + '">') + field('Ingreso variable por semana (aprox.)', '<input name="semanal" inputmode="decimal" value="' + k.semanal + '">') +
+    field('Nombres de tus ingresos (separados por coma)', '<input name="fuentes" value="' + esc((S.config.fuentes || ['Sueldo', 'Doctora']).join(', ')) + '">') +
     field('Semanas que cuento por mes', '<input name="semanasMes" inputmode="numeric" value="' + k.semanasMes + '">') +
     '<label class="check"><input type="checkbox" name="ingresoPagaMesSiguiente"' + (k.ingresoPagaMesSiguiente ? ' checked' : '') + '> Lo que me entra en un mes paga los pagos del mes siguiente</label>' +
+    '<label class="check"><input type="checkbox" name="variableSoloReal"' + (k.variableSoloReal !== false ? ' checked' : '') + '> Lo variable solo cuenta cuando me pagan (no lo doy por hecho)</label>' +
     '<h2>Hormiga</h2>' + field('Tope mensual', '<input name="topeHormiga" inputmode="decimal" value="' + k.topeHormiga + '">') + field('Avisarme al llegar al (%)', '<input name="avisoHormiga" inputmode="numeric" value="' + Math.round(k.avisoHormiga * 100) + '">') +
-    '<h2>Rendimientos</h2>' + field('Mercado Pago (% anual)', '<input name="tasaMP" inputmode="decimal" value="' + +(k.tasaMP * 100).toFixed(2) + '">') + field('Revolut (% anual)', '<input name="tasaRevolut" inputmode="decimal" value="' + +(k.tasaRevolut * 100).toFixed(2) + '">') +
+    '<h2>Rendimientos</h2>' + field('Mercado Pago (% anual)', '<input name="tasaMP" inputmode="decimal" value="' + +(k.tasaMP * 100).toFixed(2) + '">') + field('Revolut (% anual)', '<input name="tasaRevolut" inputmode="decimal" value="' + +(k.tasaRevolut * 100).toFixed(2) + '">') + field('Nu (% anual)', '<input name="tasaNu" inputmode="decimal" value="' + +((k.tasaNu != null ? k.tasaNu : 0.13) * 100).toFixed(2) + '">') +
     '<h2>Otros</h2>' + field('Doy por pagado todo lo de antes del', '<input type="date" name="registroPagosDesde" value="' + k.registroPagosDesde + '">') + '<button class="primary">Guardar ajustes</button></form>';
   html += '<div class="sechead"><h2>Tarjetas</h2><button class="link" type="button" data-act="editTarjeta" data-v="">Agregar</button></div><section class="card list">' + S.tarjetas.map(function (t) { return '<button type="button" class="li tap" data-act="editTarjeta" data-v="' + t.id + '"><div><b>' + esc(t.nombre) + '</b><span class="small muted">Corte ' + t.corte + ' · pago ' + t.pago + ' · límite ' + M(t.limite) + '</span></div>' + icon('chev') + '</button>'; }).join('') + '</section>';
   html += '<div class="sechead"><h2>Gastos fijos</h2><button class="link" type="button" data-act="editFijo" data-v="">Agregar</button></div><section class="card list">' + S.fijos.map(function (f) { var act = !f.hasta || L.mdiff(C.cur, f.hasta) >= 0; return '<button type="button" class="li tap' + (act ? '' : ' dim') + '" data-act="editFijo" data-v="' + f.id + '"><div><b>' + esc(f.nombre) + '</b><span class="small muted">' + M(f.monto) + ' · día ' + f.dia + ' · ' + esc(L.metodoNombre(C, f.metodo)) + ' · ' + L.mesNombre(f.desde) + (f.hasta ? ' a ' + L.mesNombre(f.hasta) : ' en adelante') + '</span></div>' + icon('chev') + '</button>'; }).join('') + '</section>';
@@ -913,9 +989,33 @@ function sheet(html, onSubmit) { $('#sheetBody').innerHTML = html; $('#sheet').c
 function closeSheet() { $('#sheet').classList.remove('on'); sheetSubmit = null; }
 
 // ================= ROUTER / RENDER =================
-var VIEWS = { inicio: vInicio, registrar: vRegistrar, repartir: vRepartir, meses: vMeses, mas: vMas, tarjetas: vTarjetas, tarjeta: vTarjeta, deudas: vDeudas, deuda: vDeuda, apartados: vApartados, historial: vHistorial, programados: vProgramados, ajustes: vAjustes, respaldo: vRespaldo };
+function vMeDeben() {
+  var ps = (S.porCobrar || []), html = head('Me deben', 'mas') + '<div class="scroll">', tot = 0;
+  ps.filter(function (p) { return !p.archivada; }).forEach(function (p) {
+    var i = L.infoPorCobrar(C, p); tot += i.falta;
+    html += '<section class="card"><div class="row"><b class="lg">' + esc(p.nombre) + '</b><b class="lg">' + M(i.falta) + '</b></div>' + bar(i.pct, 'green') +
+      '<div class="row small muted"><span>Te ha pagado ' + M(i.cobrado) + ' de ' + M(p.total) + '</span><span>' + (p.mensual ? M(p.mensual) + ' al mes' : '') + '</span></div>' +
+      (i.termina ? '<span class="small">A ese ritmo termina de pagarte en <b>' + L.mesNombre(i.termina, true) + '</b>.</span>' : '') +
+      '<div class="list">' + i.cobros.slice().sort(function (a, b) { return a.fecha < b.fecha ? 1 : -1; }).map(function (m) { return '<div class="li"><div><b>' + M(m.monto) + '</b><span class="small muted">' + L.fcorta(m.fecha) + (m.concepto && m.concepto !== m.categoria ? ' · ' + esc(m.concepto) : '') + '</span></div></div>'; }).join('') + '</div>' +
+      '<div class="grid2 gap"><button class="secondary" type="button" data-act="cobrar" data-v="' + p.id + '">Me pagó</button><button class="secondary" type="button" data-act="editPC" data-v="' + p.id + '">Editar</button></div></section>';
+  });
+  if (!ps.length) html += '<div class="card muted">Nadie te debe por ahora.</div>';
+  html += '<div class="ln total2"><span>Total que te deben</span><b>' + M(tot) + '</b></div><button class="secondary" type="button" data-act="editPC" data-v="">' + icon('plus') + 'Agregar a alguien que me debe</button>';
+  html += '<p class="small muted">Lo que te pagan cuenta como ingreso. Lo que esperas cada mes ya se suma a tus ingresos en Mes a mes.</p>';
+  return html + '</div>';
+}
+function formPC(id) {
+  var p = id ? S.porCobrar.filter(function (x) { return x.id === id; })[0] : { nombre: '', total: '', mensual: '' };
+  sheet('<h2>' + (id ? 'Editar' : 'Alguien me debe') + '</h2><form id="sf">' + field('Quién', '<input name="nombre" value="' + esc(p.nombre) + '" required>') + field('Cuánto te debía en total', '<input name="total" inputmode="decimal" value="' + esc(p.total) + '" required>') +
+    field('Cuánto te paga al mes (aprox.)', '<input name="mensual" inputmode="decimal" value="' + esc(p.mensual) + '">') + '<button class="primary">Guardar</button>' +
+    (id ? '<button type="button" class="secondary" data-act="archPC" data-v="' + id + '">Ya me pagó todo</button>' : '') + '</form>', function (fd) {
+    S.porCobrar = S.porCobrar || []; var o = id ? p : { id: uid() }; o.nombre = fd.get('nombre'); o.total = num(fd.get('total')); o.mensual = num(fd.get('mensual'));
+    if (!id) S.porCobrar.push(o); save(); closeSheet(); render();
+  });
+}
+var VIEWS = { medeben: vMeDeben, inicio: vInicio, registrar: vRegistrar, repartir: vRepartir, meses: vMeses, mas: vMas, tarjetas: vTarjetas, tarjeta: vTarjeta, deudas: vDeudas, deuda: vDeuda, apartados: vApartados, historial: vHistorial, programados: vProgramados, ajustes: vAjustes, respaldo: vRespaldo };
 var TABS = [['inicio', 'home', 'Inicio'], ['repartir', 'up', 'Repartir'], ['registrar', 'plus', 'Registrar'], ['meses', 'chart', 'Mes a mes'], ['mas', 'menu', 'Más']];
-var TAB_OF = { tarjetas: 'mas', tarjeta: 'mas', deudas: 'mas', deuda: 'mas', apartados: 'mas', historial: 'mas', programados: 'mas', ajustes: 'mas', respaldo: 'mas' };
+var TAB_OF = { medeben: 'mas', tarjetas: 'mas', tarjeta: 'mas', deudas: 'mas', deuda: 'mas', apartados: 'mas', historial: 'mas', programados: 'mas', ajustes: 'mas', respaldo: 'mas' };
 function render() {
   C = L.ctx(S, new Date());
   var v = VIEWS[route.v] || vInicio;
@@ -963,9 +1063,21 @@ var ACT = {
   delFijo: function (v) { if (!confirm('¿Eliminar este fijo? Si solo terminó, mejor ponle "Hasta".')) return; S.fijos = S.fijos.filter(function (f) { return f.id !== v; }); save(); closeSheet(); render(); },
   addCat: function () { sheet('<h2>Nueva categoría</h2><form id="sf">' + field('Nombre', '<input name="nombre" required>') + field('Grupo', '<select name="grupo">' + opt('Hormiga', 'Hormiga') + opt('Variable', 'Variable') + '</select>') + '<button class="primary">Guardar</button></form>', function (fd) { S.categorias.push({ nombre: fd.get('nombre'), grupo: fd.get('grupo') }); save(); closeSheet(); render(); }); },
   delCat: function (v) { S.categorias.splice(+v, 1); save(); render(); },
+  cobrar: function (v) { ui.reg = { tipo: 'ingreso', categoria: 'pc:' + v }; go('registrar'); },
+  editPC: function (v) { formPC(v); },
+  archPC: function (v) { S.porCobrar.filter(function (x) { return x.id === v; })[0].archivada = true; save(); closeSheet(); render(); },
+  setDebito: function () { var db = L.debito(C); sheet('<h2>Saldo de tu débito</h2><p class="small muted">Lo que tienes hoy en tu cuenta de débito, fuera de cajitas. Desde aquí la app suma lo que te entra y resta lo que pagas, depositas o gastas con débito.</p><form id="sf">' + field('Saldo de hoy', '<input name="monto" inputmode="decimal" value="' + (db ? db.saldo.toFixed(2) : '') + '" required>') + '<button class="primary">Guardar</button></form>', function (fd) { S.config.debito = { fecha: C.hoy, monto: num(fd.get('monto')), ts: Date.now() }; save(); closeSheet(); toast('Saldo actualizado'); render(); }); },
+  repartirSuelto: function (v) { ui.repMonto = v; go('repartir'); },
+  nuevoGuardadito: function () { formCajita(''); setTimeout(function () { var f = document.querySelector('#sf'); if (!f) return; f.nombre.value = 'Guardadito'; f.tipo.value = 'libre'; f.donde.value = 'Mercado Pago'; f.meta.value = '1000'; }, 0); },
+  cerrarGuardadito: function () { var g = S.cajitas.filter(function (x) { return !x.archivada && x.tipo === 'libre'; })[0]; if (!g) return; var s = L.saldo(C, g.id).saldo;
+    sheet('<h2>Mover lo que sobró del guardadito</h2><form id="sf">' + field('Monto', '<input name="monto" inputmode="decimal" value="' + Math.floor(s * 100) / 100 + '">') + field('A dónde', '<select name="a">' + S.cajitas.filter(function (x) { return !x.archivada && x.id !== g.id && (x.tipo === 'apartado' || x.tipo === 'deuda'); }).map(function (x) { return opt(x.id, x.nombre, false); }).join('') + '</select>') + '<button class="primary">Mover</button></form>', function (fd) {
+      var m = num(fd.get('monto')), a = fd.get('a'); if (!(m > 0) || !a) return;
+      S.movCajitas.push({ id: uid(), fecha: C.hoy, cajita: g.id, tipo: 'retiro', monto: m, nota: 'Sobrante del mes a ' + L.cajita(C, a).nombre });
+      S.movCajitas.push({ id: uid(), fecha: C.hoy, cajita: a, tipo: 'deposito', monto: m, nota: 'Sobrante del guardadito' });
+      save(); closeSheet(); toast('Movido'); render(); }); },
   backup: backup, csv: csv,
   reset: function () { if (!confirm('Se borrará todo lo que hay en la app. ¿Seguro? Guarda un respaldo antes.')) return; S = JSON.parse(JSON.stringify(SEED)); save(); go('inicio'); render(); },
-  empezarVacio: function () { S.config.empezoVacio = true; save(); go('ajustes'); toast('Agrega tus tarjetas y fijos'); },
+  empezarVacio: function () { S.config.empezoVacio = true; if (!S.config.inicioHistorial) S.config.inicioHistorial = C.cur; save(); go('ajustes'); toast('Empieza agregando tus tarjetas'); },
   closeSheet: closeSheet
 };
 document.addEventListener('click', function (e) {
@@ -978,8 +1090,8 @@ document.addEventListener('submit', function (e) {
   else if (e.target.id === 'sf' && sheetSubmit) sheetSubmit(new FormData(e.target));
   else if (e.target.id === 'cfg') {
     var fd = new FormData(e.target), k = S.config;
-    k.sueldo = num(fd.get('sueldo')); k.semanal = num(fd.get('semanal')); k.semanasMes = num(fd.get('semanasMes')) || 4; k.ingresoPagaMesSiguiente = !!fd.get('ingresoPagaMesSiguiente');
-    k.topeHormiga = num(fd.get('topeHormiga')); k.avisoHormiga = num(fd.get('avisoHormiga')) / 100; k.tasaMP = num(fd.get('tasaMP')) / 100; k.tasaRevolut = num(fd.get('tasaRevolut')) / 100; k.registroPagosDesde = fd.get('registroPagosDesde') || k.registroPagosDesde;
+    k.sueldo = num(fd.get('sueldo')); k.semanal = num(fd.get('semanal')); k.fuentes = String(fd.get('fuentes') || '').split(',').map(function (x) { return x.trim(); }).filter(Boolean); k.semanasMes = num(fd.get('semanasMes')) || 4; k.ingresoPagaMesSiguiente = !!fd.get('ingresoPagaMesSiguiente');
+    k.topeHormiga = num(fd.get('topeHormiga')); k.avisoHormiga = num(fd.get('avisoHormiga')) / 100; k.tasaMP = num(fd.get('tasaMP')) / 100; k.tasaRevolut = num(fd.get('tasaRevolut')) / 100; k.tasaNu = num(fd.get('tasaNu')) / 100; k.variableSoloReal = !!fd.get('variableSoloReal'); k.registroPagosDesde = fd.get('registroPagosDesde') || k.registroPagosDesde;
     save(); toast('Ajustes guardados'); render();
   }
 });
